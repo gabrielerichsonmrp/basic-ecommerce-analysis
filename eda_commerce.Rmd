@@ -1,0 +1,1955 @@
+---
+title: "Brazilian E-Commerce by Olist"
+author: "by Gabriel Erichson"
+output:
+  html_document:
+    df_print: paged
+    code_folding: hide
+    toc: true
+    toc_depth: 2
+    toc_float:
+      collapsed: true
+    number_sections: true
+    theme: sandstone
+    highlight: haddock
+    css:  style.css
+  pdf_document: default
+---
+
+**Project Status: in-progress**<br>
+**Last Update: 10 April 2020**<br>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	fig.align = "center",
+	message = FALSE,
+	warning = FALSE,
+	comment = "#>",
+	result = "hide"
+)
+
+options(scipen = 9999999)
+
+# wrangling
+library(tidyverse)
+library(sqldf)
+library(scales)
+library(lubridate)
+library(lattice)
+library(zoo)
+
+#EDA
+library(GGally)
+library(cowplot)
+
+#visualization
+library(ggplot2)
+library(plotly)
+library(ggthemes)
+library(paletti)
+library(kableExtra)
+library(gridExtra)
+library(grid)
+library(glue)
+library(leaflet)
+library(extrafont)
+library(maps)
+loadfonts(quiet = T)
+
+# cross validation
+library(rsample) # Initial Split
+
+# evaluation
+library(yardstick)
+library(caret)
+
+#model
+library(rfm)
+library(factoextra)
+
+```
+
+
+
+```{r, include=FALSE}
+# WARNA
+my_viridis = c(
+col1="#404788FF",
+col2="#39568CFF",
+col3="#33638DFF",
+col4="#2D708EFF",
+col5="#287D8EFF",
+col6="#238A8DFF",
+col7="#1F968BFF",
+col8="#20A387FF",
+col9="#29AF7FFF",
+col10="#3CBB75FF"
+)
+
+pal_one = c(
+col1="#207c06",
+col2="#799922",
+col3="#beb448",
+col4="#ffd178",
+col5="#f3a252",
+col6="#e5703b",
+col7="#d33333")
+
+viz_palette(pal_one)
+
+my_theme_fill  <- get_scale_fill(get_pal(pal_one))
+my_theme_color <- get_scale_color(get_pal(pal_one))
+my_theme_hex <- get_hex(pal_one)
+
+```
+
+
+
+```{r, include=FALSE}
+# PLOT THEME
+my_plot_theme <- function (base_size, base_family="Segoe UI Semibold"){ 
+  dark_color="#222629"
+  facet_header = "#78767647"
+  
+  half_line <- base_size/2
+  theme_algoritma <- theme(
+    
+    plot.background = element_rect(fill=dark_color,colour = NA), #background plot
+    plot.title = element_text(size = rel(1.2), margin = margin(b = half_line * 1.2), 
+                              color="white", hjust = 0, family=base_family, face = "bold"),
+    plot.subtitle = element_text(size = rel(1.0), margin = margin(b = half_line * 1.2), color="white", hjust=0),
+    plot.margin=unit(c(0.5,0.9,0.9,0.5),"cm"),
+    #plot.margin=unit(c(0.5,r=5,1,0.5),"cm"),
+    
+    panel.background = element_rect(fill="#18181800",colour = "#3d3d3d"), #background chart
+    panel.border = element_rect(fill=NA,color = "#3d3d3d"),
+    panel.grid.minor.x = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_line(color="#3d3d3d", linetype=2),
+    panel.grid.minor.y = element_blank(),
+    #panel.margin = unit(0.8*half_line, "mm"), 
+    panel.margin.x = NULL, 
+    panel.margin.y = NULL, 
+    panel.ontop = FALSE,
+    panel.spacing = unit(1.2,"lines"),
+    
+    legend.background = element_rect(fill="#18181800",colour = NA),
+    legend.text = element_text(size = rel(0.7),color="#bdbdbd"),
+    legend.title =  element_text(colour = "white", size = base_size, lineheight = 0.8),
+    legend.box = NULL, 
+  
+     # text = element_text(colour = "white", size = base_size, lineheight = 0.9, 
+     #                    angle = 0, margin = margin(), debug = FALSE),
+    axis.text = element_text(size = rel(0.8), color="#bdbdbd"),
+    axis.text.x = element_text(margin = margin(t = 0.9 * half_line/2)),
+    axis.text.y = element_text(margin = margin(r = 0.9 * half_line/2)),
+    axis.title.x = element_text(colour = "white", size = base_size, lineheight = 0.8,
+                                margin = margin(t = 0.9 * half_line, b = 0.9 * half_line/2)), 
+    axis.title.y = element_text(colour = "white", size = base_size, lineheight = 0.8,
+                                angle = 90, margin = margin(r = 0.9 * half_line, l = 0.9 * half_line/2)),
+    
+    strip.background = element_rect(fill=facet_header,colour = NA),
+    strip.text = element_text(colour = "white", size = rel(0.8)), 
+    strip.text.x = element_text(margin = margin(t = half_line*0.8, b = half_line*0.8)), 
+    strip.text.y = element_text(angle = -90, margin = margin(l = half_line, r = half_line)),
+    strip.switch.pad.grid = unit(0.1, "cm"), 
+    strip.switch.pad.wrap = unit(0.1, "cm"),
+    complete = TRUE
+    
+  )
+}
+
+```
+
+
+# Olist
+
+[Olist](https://olist.com/) adalah marketplace yang beroperasi sebagai perusahaan teknologi SaaS (Software as a Service) di segmen e-commerce sejak 2015. Olist menawarkan solusi bagi pemilik toko dari semua ukuran untuk meningkatkan penjualan mereka melalui platform online.
+
+<!--
+# Goal
+What I do?<br>
+1. Customer Segementation<br>
+2. Predict Customer Lifetime Value <br>
+3. Predict Furuture Purchase <br>
+4. Personalized Recommendation <br>
+
+What is the Goal?<br>
+Give Personalized Product Recommendation based on Customer Segmentation, Purchase History, Geospatial and Seasonal to increase conversion rate and customer retention.<br>-->
+
+# Retrieving Data
+## Read Data
+Dataset yang digunakan berisi informasi transaksi dari September 2016 sampai Oktober 2018. Dataset ini didownload dari  https://www.kaggle.com/olistbr/brazilian-ecommerce
+
+```{r,eval=FALSE}
+#eval=TRUE
+customers <- read_csv("data_raw/olist_customers_dataset.csv")
+geolocation <- read_csv("data_raw/olist_geolocation_dataset.csv")
+sellers <- read_csv("data_raw/olist_sellers_dataset.csv")
+products <- read_csv("data_raw/olist_products_dataset.csv")
+product_category <- read_csv("data_raw/product_category_name_translation.csv")
+orders <- read_csv("data_raw/olist_orders_dataset.csv")
+order_items <- read_csv("data_raw/olist_order_items_dataset.csv")
+order_payments <- read_csv("data_raw/olist_order_payments_dataset.csv")
+order_reviews <- read_csv("data_raw/olist_order_reviews_dataset.csv")
+
+## **brazil_abbr-external source:** https://brazil-help.com/brazilian_states.htm
+brazil_abbr <- readxl::read_xlsx("data_raw/brazil_abbr.xlsx")
+
+wd <-  as.character(getwd())
+#customers
+saveRDS(object=customers, file=paste(paste(wd,"/data_input/",sep = ""),"customers.rds",sep=""))
+
+#sellers
+saveRDS(object=sellers, file=paste(paste(wd,"/data_input/",sep = ""),"sellers.rds",sep=""))
+
+#brazil_abbr
+saveRDS(object=brazil_abbr, file=paste(paste(wd,"/data_input/",sep = ""),"brazil_abbr.rds",sep=""))
+
+#geolocation
+geolocation <- geolocation %>% 
+  group_by(geolocation_zip_code_prefix) %>% 
+  slice(1) %>% 
+  ungroup() %>% 
+  arrange(geolocation_lat,geolocation_lng)
+
+geolocation <- sqldf("select g.*, b.state_name,b.region from geolocation g
+                     left join brazil_abbr b on g.geolocation_state=b.state_code")
+saveRDS(object=geolocation, file=paste(paste(wd,"/data_input/",sep = ""),"geolocation.rds",sep=""))
+
+
+#product_category
+colnames(product_category) <- c("product_category_name","product_category_name_english")
+saveRDS(object=product_category, file=paste(paste(wd,"/data_input/",sep = ""),"product_category.rds",sep=""))
+
+# set unique product code cause product id is to long (subjective)
+generateProductCode <- function(index){
+ 
+ sapply(index, function(x) if(x > 9999) paste("PR",x,sep = "") 
+        else if (x > 999) paste("PR0",x,sep = "")  
+        else if (x > 99) paste("PR00",x,sep = "")
+        else if (x > 9) paste("PR000",x,sep = "") 
+        else paste("PR0000",x,sep = "") )
+}
+
+#products
+products <- left_join(products,product_category,by=c("product_category_name","product_category_name")) %>% 
+  mutate(
+    product_category_name = ifelse(is.na(product_category_name_english),
+                              as.character(product_category_name),as.character(product_category_name_english))
+  ) %>% 
+  select(-product_category_name_english) %>% 
+  mutate(
+    product_category_name = ifelse(product_category_name=="",NA,product_category_name), 
+    product_code = generateProductCode(row_number())
+  ) %>% 
+  select(product_id,product_code,product_category_name,product_name_lenght,product_description_lenght,product_photos_qty,
+         product_weight_g, product_length_cm, product_height_cm, product_width_cm)
+saveRDS(object=products, file=paste(paste(wd,"/data_input/",sep = ""),"products.rds",sep=""))
+
+#orders
+saveRDS(object=orders, file=paste(paste(wd,"/data_input/",sep = ""),"orders.rds",sep=""))
+
+#order_items
+saveRDS(object=order_items, file=paste(paste(wd,"/data_input/",sep = ""),"order_items.rds",sep=""))
+
+#order_payments
+saveRDS(object=order_payments, file=paste(paste(wd,"/data_input/",sep = ""),"order_payments.rds",sep=""))
+
+#order_reviews
+saveRDS(object=order_reviews, file=paste(paste(wd,"/data_input/",sep = ""),"order_reviews.rds",sep=""))
+
+```
+
+```{r}
+wd <-  as.character(getwd())
+customers <- readRDS("data_input/customers.rds")
+geolocation <- readRDS("data_input/geolocation.rds")
+sellers <- readRDS("data_input/sellers.rds")
+product_category <- readRDS("data_input/product_category.rds") 
+products <- readRDS("data_input/products.rds") 
+orders <- readRDS("data_input/orders.rds")
+order_items <- readRDS("data_input/order_items.rds")
+order_payments <- readRDS("data_input/order_payments.rds")
+order_reviews <- readRDS("data_input/order_reviews.rds")
+brazil_abbr <- readRDS("data_input/brazil_abbr.rds")
+```
+
+
+## Data Inspection {.tabset .tabset-fade .tabset-pills}
+### Customers
+```{r}
+head(customers)
+```
+
+### Geolocation
+```{r}
+head(geolocation)
+```
+
+### sellers
+```{r}
+head(sellers)
+```
+
+### Product
+```{r}
+head(products)
+```
+
+### orders
+```{r}
+head(orders)
+```
+
+### Order Items
+```{r}
+head(order_items)
+```
+
+### Order Payments
+```{r}
+head(order_payments)
+```
+
+### Order Reviews
+```{r}
+head(order_reviews)
+```
+
+
+# Data Preparation
+## Data Cleansing {.tabset .tabset-fade .tabset-pills}
+### Customers
+
+**Data Structure**<br>
+```{r}
+glimpse(customers)
+```
+
+```{r}
+customers <- customers %>% 
+  mutate(
+   customer_state = as.factor(customer_state)
+  ) 
+```
+
+
+**Missing Value**<br>
+```{r}
+colSums(is.na(customers))
+```
+
+**Duplicate Value**<br>
+```{r}
+data.frame(
+  data = length(customers$customer_id),
+  data_unique=length(unique(customers$customer_id))
+)
+```
+
+
+
+### Geolocation
+**Data Structure**
+```{r}
+glimpse(geolocation)
+```
+
+```{r}
+geolocation <- geolocation %>% 
+  mutate(
+   geolocation_state = as.factor(geolocation_state),
+   state_name = as.factor(state_name),
+   region = as.factor(region)
+  ) 
+```
+
+**Missing Value**<br>
+```{r}
+colSums(is.na(geolocation))
+```
+
+
+**Duplicate Value**<br>
+```{r}
+data.frame(
+  data = length(geolocation$geolocation_zip_code_prefix),
+  data_unique=length(unique(geolocation$geolocation_zip_code_prefix))
+)
+```
+
+
+
+### Sellers
+**Data Structure**
+```{r}
+glimpse(sellers)
+```
+
+```{r}
+sellers <- sellers %>% 
+  mutate(
+   seller_state = as.factor(seller_state)
+  ) 
+```
+
+**Missing Value**<br>
+```{r}
+colSums(is.na(sellers))
+```
+
+**Duplicate Value**<br>
+```{r}
+data.frame(
+  data = length(sellers$seller_id),
+  data_unique=length(unique(sellers$seller_id))
+)
+```
+
+
+### Product
+**Data Structure**
+```{r}
+glimpse(products)
+```
+
+**Missing Value**<br>
+```{r}
+colSums(is.na(products))
+```
+
+cukup banyak data produk yang kosong, namun kita biarkan saja dulu karena variabel tersebut kurang berpengaruh pada projek ini. 
+
+
+**Duplicate Value**<br>
+```{r}
+data.frame(
+  data = length(products$product_id),
+  data_unique=length(unique(products$product_id))
+)
+```
+
+
+### Orders
+**Data Structure**
+```{r}
+glimpse(orders)
+```
+
+Ubah tipe data order_status menjadi factor:
+```{r}
+orders <- orders %>% 
+  mutate(
+    order_status = as.factor(order_status)
+  ) 
+```
+
+
+**Missing Value**<br>
+```{r}
+colSums(is.na(orders))
+```
+
+**Duplicate Value**<br>
+```{r}
+data.frame(
+  data = length(orders$order_id),
+  data_unique=length(unique(orders$order_id))
+)
+```
+
+
+### Order Items
+**Data Structure**<br>
+```{r}
+glimpse(order_items)
+```
+
+**Missing Value**<br>
+```{r}
+colSums(is.na(order_items))
+
+```
+
+**Duplicate Value**<br>
+```{r}
+data.frame(
+  data = length(orders$order_id),
+  data_unique=length(unique(orders$order_id))
+)
+```
+
+
+### Order Payments
+**Data Structure**<br>
+```{r}
+glimpse(order_payments)
+```
+
+Merubah tipe data payment_type:
+```{r}
+order_payments <- order_payments %>% 
+  mutate(
+    payment_type = as.factor(payment_type)
+  )
+```
+
+
+**Missing Value**<br>
+```{r}
+colSums(is.na(order_payments))
+```
+
+**Duplicate Value**<br>
+```{r}
+data.frame(
+  data = length(order_payments$order_id),
+  data_unique=length(unique(order_payments$order_id))
+)
+```
+
+Terdapat data pembayaran yang duplikat karena terdapat order yang melakukan pembayaran secara cicilan sehingga tidak menjadi masalah, namun nantinya tetap akan disesuaikan dengan kebutuhan.
+
+
+### Order Reviews
+**Data Structure**<br>
+```{r}
+glimpse(order_reviews)
+```
+
+**Missing Value**<br>
+```{r}
+colSums(is.na(order_reviews))
+```
+
+Untuk sementara data *review_comment_title* dan *review_comment_message* yang NULL tidak masalah karena tidak masuk ke goal yang ingin dicapai.
+
+**Duplicate Value**<br>
+```{r}
+data.frame(
+  data = length(order_reviews$review_id),
+  data_unique=length(unique(order_reviews$review_id))
+)
+```
+
+Terdapat data review yang duplikat karena terdapat order yang memberikan review lebih dari 1 kali.
+
+
+
+
+## Combining Data
+### Data: Customer Order
+Berikut ini merupakan data transaksi customer yang didapat dari hasil merge/join antara data customer, orders, order_item, order_review, seller dan geolocation. Berikut struktur data dan pengecekan missing value:<br>
+
+```{r}
+#Customer Order
+customer_order <- customers %>% 
+  left_join(geolocation,by=c("customer_zip_code_prefix"="geolocation_zip_code_prefix")) %>% 
+  select(-c(geolocation_city,customer_state)) %>% 
+  rename(customer_lat=geolocation_lat, customer_lng=geolocation_lng,
+         customer_state_code=geolocation_state, customer_state_name=state_name,customer_region=region) %>% 
+  left_join(orders, by=c("customer_id")) %>% 
+  left_join(order_items, by=c("order_id")) %>% 
+  left_join(products, by=c("product_id")) %>% 
+  select(-c(product_name_lenght,product_description_lenght,product_photos_qty,product_weight_g,
+         product_length_cm,product_height_cm,product_width_cm)) %>% 
+  left_join(sellers, by=c("seller_id")) %>% 
+  left_join(geolocation, by=c("seller_zip_code_prefix"="geolocation_zip_code_prefix")) %>% 
+  select(-c(geolocation_city,seller_state)) %>% 
+  rename(seller_lat=geolocation_lat, seller_lng=geolocation_lng,
+         seller_state_code=geolocation_state, seller_state_name=state_name,seller_region=region)
+
+order_review <- orders %>% 
+  left_join(order_reviews,by=c("order_id")) %>% 
+  group_by(order_id) %>% 
+  summarise(
+    review_score = round(mean(review_score))
+  ) %>% 
+  ungroup()
+
+
+customer_order <- customer_order %>% left_join(order_review, by=c("order_id"))
+
+customer_order <- customer_order %>% select(
+order_id, order_status, order_purchase_timestamp,order_approved_at, order_delivered_carrier_date, order_delivered_customer_date, order_estimated_delivery_date,customer_unique_id,customer_zip_code_prefix,
+customer_lat,customer_lng,customer_city,customer_state_code, customer_state_name, customer_region, order_item_id, 
+product_id, product_code, product_category_name, price, freight_value, review_score, seller_id, shipping_limit_date, seller_zip_code_prefix, seller_lat, seller_lng, seller_city, seller_state_code, seller_state_name, seller_region) %>% 
+arrange(order_purchase_timestamp,order_id,order_item_id) %>% 
+  filter(!(!order_status %in% c("canceled","unavailable") & is.na(product_id)))
+
+```
+
+**Data Structure:**<br>
+```{r}
+glimpse(customer_order)
+```
+
+**Missing Value:**<br>
+```{r}
+colSums(is.na(customer_order))
+```
+
+Cukup banyak data geolocation yang kosong maka perlu kita sesuaikan. Data geolocation yang null akan dilakukan imputasi menggunakan rata-rata latitude dan longitude dari setiap customer dan pelanggan yang berada pada kota/state yang sama.
+
+```{r}
+#Customer geolocation
+na_cust_geo <- sqldf("select * from customers c 
+                left join geolocation g on g.geolocation_zip_code_prefix = c.customer_zip_code_prefix")
+
+na_zip <- na_cust_geo %>% 
+  filter(is.na(geolocation_zip_code_prefix)) %>% 
+  select(customer_zip_code_prefix,customer_state,customer_city)
+  
+na_geo <- geolocation
+
+na_geo <- na_geo %>% 
+  group_by(geolocation_state) %>% 
+  summarise(
+    geolocation_lat = mean(geolocation_lat),
+    geolocation_lng =mean(geolocation_lng)
+    ) %>% 
+  ungroup()
+
+na_geo <- sqldf("select * from na_geo geo inner join brazil_abbr abbr on geo.geolocation_state = abbr.state_code")
+
+na_geo <- sqldf("select * from na_geo geo inner join na_zip zip on geo.geolocation_state = zip.customer_state") %>% 
+  select(customer_zip_code_prefix,geolocation_lat, geolocation_lng, customer_city, customer_state, state_name, region) %>%
+  rename(geolocation_zip_code_prefix=customer_zip_code_prefix, geolocation_city=customer_city,
+         geolocation_state=customer_state)
+
+
+geolocation <- rbind(geolocation,na_geo)
+
+
+#Seller geolocation
+na_seller_geo <- sqldf("select * from sellers s 
+                left join geolocation g on g.geolocation_zip_code_prefix = s.seller_zip_code_prefix")
+
+
+colSums(is.na(na_seller_geo))
+
+na_seller_zip <- na_seller_geo %>% 
+  filter(is.na(geolocation_zip_code_prefix)) %>% 
+  select(seller_zip_code_prefix,seller_state,seller_city)
+  
+na_geo <- geolocation
+
+na_geo <- na_geo %>% 
+  group_by(geolocation_state) %>% 
+  summarise(
+    geolocation_lat = mean(geolocation_lat),
+    geolocation_lng =mean(geolocation_lng)
+    ) %>% 
+  ungroup()
+
+na_geo <- sqldf("select * from na_geo geo inner join brazil_abbr abbr on geo.geolocation_state = abbr.state_code")
+
+na_geo <- sqldf("select * from na_geo geo inner join na_seller_zip zip on geo.geolocation_state = zip.seller_state") %>% 
+  select(seller_zip_code_prefix,geolocation_lat, geolocation_lng, seller_city, seller_state, state_name, region) %>%
+  rename(geolocation_zip_code_prefix=seller_zip_code_prefix, geolocation_city=seller_city,
+         geolocation_state=seller_state)
+
+geolocation <- rbind(geolocation,na_geo)
+
+wd <-  as.character(getwd())
+saveRDS(object=geolocation, file=paste(paste(wd,"/data_input/",sep = ""),"geolocation.rds",sep=""))
+
+```
+
+**Re-combine Data Customer Order:**<br>
+```{r, eval=TRUE}
+#Customer Order
+customer_order <- customers %>% 
+  left_join(geolocation,by=c("customer_zip_code_prefix"="geolocation_zip_code_prefix")) %>% 
+  select(-c(geolocation_city,customer_state)) %>% 
+  rename(customer_lat=geolocation_lat, customer_lng=geolocation_lng,
+         customer_state_code=geolocation_state, customer_state_name=state_name,customer_region=region) %>% 
+  left_join(orders, by=c("customer_id")) %>% 
+  left_join(order_items, by=c("order_id")) %>% 
+  left_join(products, by=c("product_id")) %>% 
+  select(-c(product_name_lenght,product_description_lenght,product_photos_qty,product_weight_g,
+         product_length_cm,product_height_cm,product_width_cm)) %>% 
+  left_join(sellers, by=c("seller_id")) %>% 
+  left_join(geolocation, by=c("seller_zip_code_prefix"="geolocation_zip_code_prefix")) %>% 
+  select(-c(geolocation_city,seller_state)) %>% 
+  rename(seller_lat=geolocation_lat, seller_lng=geolocation_lng,
+         seller_state_code=geolocation_state, seller_state_name=state_name,seller_region=region)
+
+order_review <- orders %>% 
+  left_join(order_reviews,by=c("order_id")) %>% 
+  group_by(order_id) %>% 
+  summarise(
+    review_score = round(mean(review_score))
+  ) %>% 
+  ungroup()
+
+
+customer_order <- customer_order %>% left_join(order_review, by=c("order_id")) %>% 
+  mutate(
+    price = ifelse(is.na(price),0,price),
+    freight_value = ifelse(is.na(freight_value),0,freight_value)
+  )
+
+customer_order <- customer_order %>% 
+  select(
+  order_id, order_purchase_timestamp,order_status,
+  order_item_id,product_id, product_code, product_category_name, price, freight_value, product_rating=review_score,
+  customer_unique_id,customer_lat,customer_lng,customer_city, customer_state_name, customer_region) %>% 
+arrange(order_purchase_timestamp,order_id) %>% 
+  filter(!(!order_status %in% c("canceled","unavailable") & is.na(product_id))) %>% 
+  distinct()
+
+# customer_order <- customer_order %>% 
+#   select(
+#   order_id, order_purchase_timestamp,order_status,
+#   order_item_id,product_id, product_code, product_category_name, price, freight_value, product_rating=review_score,
+#   customer_unique_id,customer_lat,customer_lng,customer_city, customer_state_name, customer_region) %>% 
+# arrange(order_purchase_timestamp,order_id)
+
+
+# Value adjustment based on external resources
+customer_order[customer_order$customer_unique_id=="507dc9becd4fc65635d90682dfa9d3a3",]$customer_lat <- -27.85576
+customer_order[customer_order$customer_unique_id=="507dc9becd4fc65635d90682dfa9d3a3",]$customer_lng <- -54.44738
+
+lat <- customer_order[customer_order$customer_unique_id=="507dc9becd4fc65635d90682dfa9d3a3",]$customer_lat
+lng <- customer_order[customer_order$customer_unique_id=="507dc9becd4fc65635d90682dfa9d3a3",]$customer_lng
+
+customer_order[customer_order$customer_unique_id=="e32298294895b7f92d89754e744e930c",]$customer_lat <- lat[1]-0.0001
+customer_order[customer_order$customer_unique_id=="e32298294895b7f92d89754e744e930c",]$customer_lng <- lng[1]-0.0002
+
+customer_order[customer_order$customer_unique_id=="ed8bf8f73a4c6a4d1e8b519c03c1c17b",]$customer_lat <- lat[1]-0.0002
+customer_order[customer_order$customer_unique_id=="ed8bf8f73a4c6a4d1e8b519c03c1c17b",]$customer_lng <- lng[1]-0.0004
+
+customer_order[customer_order$customer_unique_id=="8ad15fb1cf056731335e36eb723c0eac",]$customer_lat <- lat[1]-0.0004
+customer_order[customer_order$customer_unique_id=="8ad15fb1cf056731335e36eb723c0eac",]$customer_lng <- lng[1]-0.0008
+
+customer_order[customer_order$customer_unique_id=="d32e5ab26ec56747954dab0844e8be2e",]$customer_lat <- lat[1]-0.0001
+customer_order[customer_order$customer_unique_id=="d32e5ab26ec56747954dab0844e8be2e",]$customer_lng <- lng[1]-0.0008
+
+customer_order[customer_order$customer_unique_id=="f46ebdbd5c48c0683980a759b8937912",]$customer_lat <- lat[1]-0.0008
+customer_order[customer_order$customer_unique_id=="f46ebdbd5c48c0683980a759b8937912",]$customer_lng <- lng[1]-0.0002
+
+customer_order[customer_order$customer_unique_id=="dc02867c21f42ed442f02e434234e3bb",]$customer_lat <- lat[1]-0.0002
+customer_order[customer_order$customer_unique_id=="dc02867c21f42ed442f02e434234e3bb",]$customer_lng <- lng[1]-0.0008
+
+customer_order[customer_order$customer_unique_id=="23a886ebce4bc86212c72f669a9bdb31",]$customer_lat <- lat[1]-0.0008
+customer_order[customer_order$customer_unique_id=="23a886ebce4bc86212c72f669a9bdb31",]$customer_lng <- lng[1]-0.0008
+
+customer_order[customer_order$customer_unique_id=="fa58e11c149d7e903dbe5f6c854277e7",]$customer_lat <- lat[1]-0.0003
+customer_order[customer_order$customer_unique_id=="fa58e11c149d7e903dbe5f6c854277e7",]$customer_lng <- lng[1]-0.0006
+
+customer_order[customer_order$customer_unique_id=="39625643b498b08ebf941f9170277974",]$customer_lat <- lat[1]-0.0003
+customer_order[customer_order$customer_unique_id=="39625643b498b08ebf941f9170277974",]$customer_lng <- lng[1]-0.0007
+
+customer_order[customer_order$customer_unique_id=="ea0291d9b2223d0dc3f8d5b48ae2574f",]$customer_state_name <- "Rio Grande do Sul"
+customer_order[customer_order$customer_unique_id=="decf5e95920bb2dc3fe659c102dbbf70",]$customer_lat <- -29.72267
+customer_order[customer_order$customer_unique_id=="decf5e95920bb2dc3fe659c102dbbf70",]$customer_lng <- -53.82436
+
+customer_order[customer_order$customer_unique_id=="6740f8899f3c70b5b08b2e0bad37e567",]$customer_lat <- -25.530555
+customer_order[customer_order$customer_unique_id=="6740f8899f3c70b5b08b2e0bad37e567",]$customer_lng <- -48.503208
+
+customer_order[customer_order$customer_unique_id=="9e68775971541ca8a79b6fce848e7aee",]$customer_lat <- -1.466900
+customer_order[customer_order$customer_unique_id=="9e68775971541ca8a79b6fce848e7aee",]$customer_lng <- -56.379157
+
+customer_order[customer_order$customer_unique_id=="2a4b1192846ec238d62df3838257bad9",]$customer_lat <- -1.467120 
+customer_order[customer_order$customer_unique_id=="2a4b1192846ec238d62df3838257bad9",]$customer_lng <- -56.378953
+
+customer_order[customer_order$customer_unique_id=="ba1f863dca8e24fc845fda7e6b9e98d0",]$customer_lat <- -25.866092
+customer_order[customer_order$customer_unique_id=="ba1f863dca8e24fc845fda7e6b9e98d0",]$customer_lng <- -49.365795
+
+customer_order[customer_order$customer_unique_id=="67045ba793233569bed80ccf42e02070",]$customer_lat <- -25.846092
+customer_order[customer_order$customer_unique_id=="67045ba793233569bed80ccf42e02070",]$customer_lng <- -49.385795
+
+customer_order[customer_order$customer_unique_id=="66596e08440320718dd23ea4d89ed37f",]$customer_lat <- -25.826092
+customer_order[customer_order$customer_unique_id=="66596e08440320718dd23ea4d89ed37f",]$customer_lng <- -49.315795
+
+customer_order[customer_order$customer_unique_id=="fb98dba63ddb41a7f253e8f590e80107",]$customer_lat <- -22.27874
+customer_order[customer_order$customer_unique_id=="fb98dba63ddb41a7f253e8f590e80107",]$customer_lng <- -42.53641
+  
+```
+
+**Missing value after re-combine**<br>
+```{r}
+colSums(is.na(customer_order))
+```
+
+
+Dapat dilihat masih terdapat missing value pada data **order_item_id, product_id,price, geolocation seller**, hal ini terjadi pada order yang memiliki status **canceled** dan **unavailable**, sehingga tidak masalah karena menandakan bahwa customer tidak jadi melakukan order. Kemudian terdapat missing value juga pada data **order_approved_at **, **order_delivered_carrier_date** dan **order_delivered_customer_date**, namun tidak menjadi masalah karena sementara ini variabel tersebut tidak menjadi fokus di projek ini. Berikut 10 data Customer Order teratas:
+
+```{r}
+wd <-  as.character(getwd())
+saveRDS(object=customer_order, file=paste(paste(wd,"/data_clean/",sep = ""),"customer_order.rds",sep=""))
+#saveRDS(object=customer_order, file=paste(paste(wd,"/data_clean/",sep = ""),"customer_order.rds",sep=""))
+head(customer_order,10)
+```
+
+
+### Data: Order Payment
+
+Berikut ini data pembayaran per-setiap order yang merupakan hasil merge/join dari data **customer, order dan order_payment**. Perlu diketahui bahwa Olist mendukung fitur sistem pembayaran kredit dan juga multi-payment. Berikut struktur data dan pengecekan missing value:<br>
+
+```{r}
+# customer_order
+customer_payment <- customer_order %>% 
+  select(customer_unique_id,order_id) %>% 
+  distinct() %>% 
+left_join(order_payments, by=c("order_id")) %>% 
+  select(customer_unique_id,order_id,payment_type,payment_value,payment_sequential) %>% 
+  spread(payment_type,payment_value) %>% 
+  replace(is.na(.), 0) %>% 
+  group_by(order_id) %>% 
+  summarise(
+    payment_sequential = length(payment_sequential),
+    boleto = sum(boleto),
+    credit_card = sum(credit_card),
+    debit_card = sum(debit_card),
+    not_defined = sum(not_defined),
+    voucher = sum(voucher)
+  ) %>% 
+  ungroup() %>% 
+  mutate(
+    total_payment = boleto+credit_card+debit_card+not_defined+voucher
+  )
+```
+
+**Data Structure:**<br>
+```{r}
+glimpse(customer_payment)
+```
+
+**Missing Value:**<br>
+```{r}
+colSums(is.na(customer_payment))
+```
+
+Informasi diatas menunjukan tidak terdapat missing value dari data Order Payment. Berikut 10 data Order Payment teratas:<br>
+
+```{r}
+#eval=TRUE
+wd <-  as.character(getwd())
+saveRDS(object=customer_payment, file=paste(paste(wd,"/data_clean/",sep = ""),"customer_payment.rds",sep=""))
+head(customer_payment,10)
+```
+
+
+***
+
+<br>
+
+
+# Exploratory Data Analysis
+```{r}
+customer_order <- readRDS("data_clean/customer_order.rds")
+customer_payment <- readRDS("data_clean/customer_payment.rds")
+```
+
+
+
+## Count of Order by Status
+
+```{r, fig.width=8.5}
+
+plot_order_status <- customer_order %>%
+  mutate(
+    year = as.factor(year(order_purchase_timestamp)),
+    ym = as.yearmon(order_purchase_timestamp),
+    yearmonth = format(order_purchase_timestamp, format='%Y-%m-1'),
+    yearmonth = ymd(yearmonth)
+  ) %>% 
+  select(order_id,order_status,year,ym, yearmonth) %>% 
+  distinct() %>%
+  group_by(year,ym, yearmonth,order_status) %>% 
+  summarise(
+    freq = n()
+  ) %>% 
+  ungroup() %>% 
+  arrange(yearmonth) %>% 
+   mutate(
+    popup = glue("Yearmon : {ym}
+                 Frequency : {freq}
+                 Status: {order_status}"),
+    order_status = reorder(order_status, freq)
+  ) %>%
+  ggplot(aes(month(yearmonth,label = TRUE), log(freq), color=order_status, fill=order_status, group=order_status))+
+  geom_bar(aes(text=popup),stat="identity",
+           position = position_dodge2(padding = 0.4, width = 0.9), show.legend = FALSE) +
+  #scale_y_continuous(expand = c(0, 0), limits = c(0, 10)) +
+  labs(
+    title = "Total Order by status",
+    x="",
+    y="Frequency",
+    fill="Order Status"
+  )+
+  facet_wrap(~year, ncol=1, scales = "free_y")+
+  my_theme_color()+
+  my_theme_fill()+
+  my_plot_theme(9)+
+  theme(
+    axis.text.y = element_blank(),
+    legend.position = "bottom",
+    legend.margin = margin(-0.5,0,0,0, unit="cm")
+  )
+
+ggplotly(plot_order_status, tooltip = "text", height = 480) %>%
+layout(margin = list(l = 50, r = 30, b = 50, t = 90)) %>% 
+layout(
+    legend=list(orientation = "h",
+                   y = -0.1, x = 0.0)
+  )%>% 
+layout(title = list(text = paste0('Total Order by Status',
+                                    '<br>',
+                                    '<sup>',
+                                    'This visualization using log(frequency)',
+                                    '</sup>')))
+
+```
+
+Data divisualisasikan menggunakan Log(Order Frequency) supaya frekuensi minimun tetap dapat terlihat jelas. Perlu diketahui, data Order ini memiliki beberapa status antara lain:<br>
+1. *Processing* : Status setelah customer melakukan order.<br>
+2. *Unavailable* : Satatus ketika penjual menyatakan stock produk tidak tersedia setelah customer melakukan order.<br>
+3. *Canceled* : Status ketika customer membatalkan order.<br>
+4. *Approved* : Status ketika order disetujui oleh penjual.<br>
+5. *Invoiced* : Status ketika order sudah dibayar oleh customer.<br>
+6. *Shipped* : Status ketika produk sedang dikirimkan oleh penjual ke customer.<br>
+7. *Delivered* : status ketika produk sudah sampai pada customer.<br> 
+
+Chart diatas menunjukan jumlah order dengan status *Delivered* jauh lebih banyak dari yang lainnya
+pada setiap bulan dari 2016-2018 kecuali pada bulan September-Oktober 2018. Jika dilihat pada bulan September-Oktober 2018 hanya terdapat **1 order berstatus Shipped** dan **19 order berstatus Cancelled** dan **tidak ada order yang berstatus Delivered, sehingga membutikan belum penjualan yang berhasil, kecuali 1 order Shipped tersebut**. Mari kita lihat data ordernya.
+ 
+
+## Growth of Order Frequency
+
+```{r, fig.width=8.5}
+plot_order_freq <- customer_order %>% 
+  #filter(!order_status %in% c("canceled","unavailable")) %>% 
+  mutate(
+    year = as.factor(year(order_purchase_timestamp)),
+    ym = as.yearmon(order_purchase_timestamp),
+    yearmonth = format(order_purchase_timestamp, format='%Y-%m-1'),
+    yearmonth = ymd(yearmonth)
+  ) %>% 
+  select(order_id,year,ym, yearmonth) %>% 
+  distinct() %>%
+  group_by(year,ym, yearmonth) %>%
+  summarise(freq = n()) %>% 
+  ungroup() %>% 
+  mutate(
+    normalisasi = (freq-min(freq))/(max(freq)-min(freq)),
+    popup=glue("Year-Month : {ym}
+                    Frequency : {freq}")) %>% 
+  arrange(yearmonth) %>% 
+  ggplot(aes(x=yearmonth, y=normalisasi),text=popup)+
+  geom_area(fill=my_theme_hex("col2"),alpha=0.7)+
+  geom_line(size=0.7,color="white") +
+  geom_point(color="white", size = 2, alpha = 0.9,aes(text=popup))+
+  
+  labs(
+    title="Growth of Order Frequency per Month",
+    x="Month",
+    y="Frequency"
+  )+
+  scale_x_date(breaks=date_breaks('1 months'),
+     labels=date_format('%b %y'))+
+  my_theme_color()+
+  my_plot_theme(10)+
+  theme(
+    axis.text.x = element_text(angle = 90),
+    legend.position = "none"
+  )
+
+ggplotly(plot_order_freq, tooltip = "text") %>%
+layout(title = list(text = paste0('Growth of Order Frequency per Month',
+                                    '<br>',
+                                    '<sup>',
+                                    'Monthly order frequency from September 2016 - October 2018',
+                                    '</sup>')))
+
+```
+
+Chart diatas menunjukan frekuensi order pada setiap bulannya dari September 2016 - Oktober 2018. Jika dilihat dari frekuensi order tahun 2016 sangat kecil, namun relatif stabil dan meningkat dari januari 2017 - Agustus 2018. Kemudian terjadi penurunan frekuensi order sangat tinggi pada bulan September-Oktober 2018 dari 7308 order menurun hinga 20 order. Berdasarkan visualisasi status order sebelumnya, 20 order pada bulan September-Oktober 2018 terdiri dari **19 order Cancelled dan 1 order shipped**. Produk yang dijual pada Olist terdiri dari berbagai macam jenis dan berbagai macam harga, mari kita lihat order amount nya.
+
+
+
+## Growth of Order Amount
+
+```{r, fig.width=8.5}
+
+
+
+plot_order_freq <- customer_order %>% 
+  #filter(!order_status %in% c("canceled","unavailable")) %>% 
+  mutate(
+    year = as.factor(year(order_purchase_timestamp)),
+    ym = as.yearmon(order_purchase_timestamp),
+    yearmonth = format(order_purchase_timestamp, format='%Y-%m-1'),
+    yearmonth = ymd(yearmonth)
+  ) %>% 
+  group_by(year,ym, yearmonth) %>% 
+  summarise(total_amount = sum(price+freight_value)) %>% 
+  ungroup() %>% 
+  mutate(popup=glue("Year-Month : {ym}
+                    Total Amount : {total_amount}")) %>% 
+  arrange(yearmonth) %>% 
+  ggplot(aes(x=yearmonth, y=total_amount), text=popup)+
+  geom_area(fill=my_theme_hex("col3"),alpha=0.7)+
+  geom_line(size=0.7,color="white") +
+  geom_point(color="white", size = 2, alpha = 0.9, aes(text=popup))+
+  labs(
+    title="Growth of Order Amount per Month",
+    x="Month",
+    y="Order Amount"
+  )+
+  scale_x_date(breaks=date_breaks('1 months'),
+     labels=date_format('%b %y'))+
+  my_theme_color()+
+  my_plot_theme(10)+
+  theme(
+    axis.text.x = element_text(angle = 90),
+    legend.position = "none"
+  )
+
+ggplotly(plot_order_freq, tooltip = "text") %>%
+layout(title = list(text = paste0('Growth of Order Amount per Month',
+                                    '<br>',
+                                    '<sup>',
+                                    'Monthly order amount from September 2016 - October 2018',
+                                    '</sup>')))
+
+```
+
+Terkait penurunan order pada bulan september-Oktober 2018, bisa dilihat **order amount bulan september 2018 hanya R$ 166.46 yang merupakan amount dari 1 order yang berstatus Shipped dan karena pada OKtober 2018 seluruh order bersatus Cancelled maka total amount-nya nol(0)**. Namun secara keseluruhan, dapat dilihat pola visualisasi order amount dan frekuensi order cukup sama. Hal ini menunjukan, frekuensi Order sangat berpengaruh untuk menentukan jumlah order amount, dalam artian hampir dipastikan setiap order memiliki amount disekitar rata-rata, kecuali bulan Agustus 2018, Pada chart frekuensi order menunjukan bulan Agustus 2018 terdapat kenaikan frekuensi order namun pada chart total order amount justru mengalami penurunan. Mengapa?
+
+```{r}
+
+customer_order %>% 
+  filter(year(order_purchase_timestamp)=="2018", month(order_purchase_timestamp) %in% c("6","7","8")) %>%
+  group_by(order_id,month=month(order_purchase_timestamp)) %>% 
+  summarise(
+    order_amount = sum(price+freight_value)
+  ) %>% 
+  ungroup() %>% 
+  mutate(
+    year = 2018
+  ) %>% 
+  group_by(year,month) %>% 
+  summarise(
+    freq_order = n(),
+    mean_order_amount=mean(order_amount)
+    )
+
+```
+
+Data diatas menunjukan pada bulan Agustus 2018, rata-rata order amount lebih rendah sehingga mengakibatkan total order amount menjadi lebih rendah. Meskipun begitu, secara keseluruhan frekuensi order sangat berpengaruh terhadap total order amount sehingga kita bisa mengabaikan efek rata-rata order amount perbulan. Berdasarkan case ini dapat disimpulkan bahwa jumlah order amount dapat meningkat jika frekuensi order bertambah, sehingga muncul pertanyaan **Bagaimana cara meningkatkan frekuensi order?** Tentunya dengan mencari customer baru untuk melakukan order, namun bisa juga apabila jika fokus meningkatkan frekuensi order daripada customer yang sudah ada, sehingga pertanyaannya berubah menjadi **Bagaimana meningkatkan frekuensi order daripada customer yang ada?**. Oke sebelum sampai kesitu mari kita cek seberapa besar seorang customer melakukan pembelian berulang.
+
+
+```{r, fig.width=8.5}
+cust_freq_order <- customer_order %>% 
+  select(customer_unique_id,order_id) %>% 
+  distinct() %>% 
+  group_by(customer_unique_id) %>% 
+  summarise(freq = n()) %>% 
+  ungroup() %>% 
+  group_by(freq) %>% 
+  summarise(
+    count_cust = n()
+  ) %>% 
+  ungroup() %>% 
+  mutate(
+    normalisasi = (count_cust-min(count_cust))/(max(count_cust)-min(count_cust))+0.1,
+    popup = glue("Repeat Order: {freq}
+                  Count Cust: {count_cust}")
+  )
+
+
+plot_cust_freq_order <- ggplot(cust_freq_order,aes(freq,normalisasi))+
+  geom_bar(aes(fill=freq,text=popup), stat = "identity", position = position_dodge2(padding = 2))+
+  geom_text(aes(label=count_cust, y=normalisasi+0.05),size=3, color="white")+
+  labs(
+    title="Total Customer based on Repeat Order",
+    x = "Frequency of Repeat Order",
+    y=""
+  )+
+  scale_x_continuous(limits = c(0,(max(cust_freq_order$freq)+2)),breaks = c(0:(max(cust_freq_order$freq)+2)))+
+  scale_fill_gradient(low=my_theme_hex("col1"),high=my_theme_hex("col5"))+
+  my_plot_theme(10)+
+  theme(
+    axis.title.y = element_blank(),
+    axis.text.y = element_blank()
+  )
+
+
+
+ggplotly(plot_cust_freq_order, tooltip = "text") %>%
+layout(title = list(text = paste0('Total Customer by Repeat Order',
+                                    '<br>',
+                                    '<sup>',
+                                    'Data using Order frequency of each Customer from 2016-09-04 untill 2018-10-17 ',
+                                    '</sup>')))
+
+
+```
+
+Repeat order paling banyak terjadi 17 kali dan hanya dilakukan oleh 1 orang customer. Selain itu, 97% Customer hanya melakukan 1 kali order. Dalam case ini saya berasumsi bahwa Olist kurang berupaya untuk meningkatkan frekuensi order dari customer yang ada, cukup disayangkan mengingat jumlah customer yang ada tidak sedikit. Terkait chart diatas, maka seharusnya frekuensi order berbanding lurus dengan pertumbuhan customer baru yang melakukan order. Mari kita cek.
+
+```{r, fig.width=8.5}
+plot_new_cust <- customer_order %>% 
+  #filter(!order_status %in% c("canceled","unavailable")) %>% 
+    mutate(
+    year = as.factor(year(order_purchase_timestamp)),
+    ym = as.yearmon(order_purchase_timestamp),
+    yearmonth = format(order_purchase_timestamp, format='%Y-%m-1'),
+    yearmonth = ymd(yearmonth)
+  ) %>% 
+  group_by(customer_unique_id,year,ym, yearmonth) %>% 
+  summarise(
+    first_order = min(order_purchase_timestamp)
+  ) %>% 
+  ungroup() %>% 
+  group_by(year,ym, yearmonth) %>%  
+  summarise(freq = n()) %>% 
+  ungroup() %>%
+  mutate(
+    popup=glue("Year-mon: {ym}
+               {freq} new customers")
+  ) %>% 
+  arrange(yearmonth) %>% 
+  ggplot(aes(yearmonth,freq))+
+  geom_area(fill=my_theme_hex("col5"),alpha=0.7)+
+  geom_line(size=0.7,color="white") +
+  geom_point(color="white", size = 2, alpha = 0.9, aes(text=popup))+
+  labs(
+    title="Growth of New Customer by Order per Month",
+    x="Year-Month",
+    y="Freq New Customer"
+  )+
+   scale_x_date(breaks=date_breaks('1 months'),
+     labels=date_format('%b %y'))+
+  my_theme_color()+
+  my_plot_theme(10)+
+  theme(
+    axis.text.x = element_text(angle = 90),
+    legend.position = "none"
+  )
+
+
+ggplotly(plot_new_cust, tooltip = "text") %>%
+layout(title = list(text = paste0('Growth of New Customer by Order per Month',
+                                    '<br>',
+                                    '<sup>',
+                                    'Exclude order with status in Cancelled & Unavailable',
+                                    '</sup>')))
+
+```
+
+Bisa dilihat pola visualisasi chart diatas relatif sama dengan pola visualisasi frekuensi order dan pola visualisasi total order amount, maka seharusnya jumlah customer akan sangat mempengaruhi total order amount yang ada, berikut pengecekannya:
+
+```{r, fig.width=8.5}
+plot_freq_amount <- customer_order %>% 
+  #filter(!order_status %in% c("canceled","unavailable")) %>% 
+  group_by(customer_unique_id,customer_state_name,year=as.factor(year(order_purchase_timestamp))) %>% 
+  summarise(
+    total = sum(price+freight_value)
+  ) %>% 
+  ungroup() %>% 
+  distinct() %>% 
+  group_by(customer_state_name,year = year) %>% 
+  summarise(
+    total = sum(total),
+    freq = n()
+  ) %>% 
+  ungroup() %>% 
+  mutate(
+    popup = glue("State : {customer_state_name}
+                 Total Customer : {freq}
+                 Total Order Amount : {total}")
+  ) %>% 
+  ggplot(aes(freq,total), text=popup, group = customer_state_name)+
+  geom_smooth(method = "lm", color=my_theme_hex("col2"), alpha=0.5)+
+  geom_point(aes(color=customer_state_name, text=popup),show.legend = FALSE, size=3, alpha=0.7)+
+  labs(
+    title = "Impact of Total Customer on Order Amount",
+    y="",
+    x="Total Customer"
+  )+
+  facet_wrap(~year, scales = "free", ncol = 1)+
+  my_theme_color()+
+  my_plot_theme(11)+
+  theme(
+    panel.spacing = unit(1.2,"lines")
+  )
+
+ggplotly(plot_freq_amount, tooltip="text", height = 580) %>%
+layout(showlegend=FALSE,
+       margin = list(l = 50, r = 30, b = 50, t = 90)) %>% 
+layout(title = list(text = paste0('Customer VS Order Amount',
+                                    '<br>',
+                                    '<sup>',
+                                    'Impact of Total Customer on Order Amount from 2016-09-04 untill 2018-10-17',
+                                    '</sup>')))
+
+  
+```
+
+Chart diatas memperjelas bahwa semakin meningkat jumlah customer maka semakin meningkat total order amount. Sangat baik Olist selalu mampu mendapatkan customer baru, meskipun begitu dapat dilihat karena pada September-Oktober 2018 jumlah customer baru hanya 18 orang sehingga menyebabkan total order amount menurun drastis. Saya berpendapat bahwa akan sangat baik apabila Olist mempertimbangkan customer yang sudah ada untuk meningkatkan frekuensi order dan total order amount. Mari kita lihat total order amount dan total customer pada setiap negara bagian di Brazil.<br>
+
+
+## Order Amount & Customer by State
+
+```{r, fig.width=8.5}
+plot_best_state <-  customer_order %>% 
+  filter(!order_status %in% c("canceled","unavailable")) %>% 
+  group_by(customer_state_name) %>% 
+  summarise(
+    total = sum(price+freight_value)
+  ) %>% 
+  ungroup() %>% 
+  mutate(
+    customer_state_name = reorder(customer_state_name,total),
+    popup = glue("State: {customer_state_name}
+      Total Monetary : {total}")
+  ) %>% 
+  ggplot(aes(customer_state_name,(total/sum(total))*100, text=popup)) +
+  geom_bar(aes(fill=customer_state_name), stat = "identity", show.legend = FALSE)+
+  geom_text(aes(label=paste0(round((total/sum(total))*100,1),"%"), 
+                y=(total/sum(total))*100+1.5), vjust = -0.5, size=2.5, color="white") +
+  labs(
+    title = "Total Order Amount by State in Brazil",
+    x="",
+    y="Total Order Amount (%)",
+    fill="Year"
+  )+
+  coord_flip()+
+  my_theme_fill()+
+  my_plot_theme(10)
+
+
+ggplotly(plot_best_state, tooltip="text") %>%
+layout(showlegend=FALSE) %>% 
+layout(title = list(text = paste0('Total Order Amount by State',
+                                    '<br>',
+                                    '<sup>',
+                                    'Total Order Amount by State from 2016-09-04 untill 2018-10-17',
+                                    '</sup>')))
+
+```
+
+**Sao Paulo** memiliki total order amount paling tinggi dengan proporsi 37.4% dari total order amount keseluruhan dan jauh lebih tinggi dari negara bagian lainnya. Mari kita cek jumlah customernya.
+
+```{r, fig.width=8.5}
+plot_total_customer <-  customer_order %>% 
+  filter(!order_status %in% c("canceled","unavailable")) %>% 
+  select(customer_unique_id,customer_state_name) %>% 
+  distinct() %>% 
+  group_by(customer_state_name) %>% 
+  summarise(
+    freq = n()
+  ) %>% 
+  ungroup() %>% 
+  mutate(
+    customer_state_name = reorder(customer_state_name,freq),
+     popup = glue("State: {customer_state_name}
+      Total Customer : {freq}")
+  ) %>% 
+  ggplot(aes(customer_state_name,(freq/sum(freq))*100, text=popup)) +
+  geom_bar(aes(fill=customer_state_name), stat = "identity", show.legend = FALSE)+
+  geom_text(aes(label=paste0(round((freq/sum(freq))*100,2),"%"), 
+                y=(freq/sum(freq))*100+2), hjust = 0.2, size=2.5, color="white") +
+  labs(
+    title = "Total Customer by State",
+    x="",
+    y="Total Customer (%)",
+    fill="Year"
+  )+
+  coord_flip()+
+  my_theme_fill()+
+  my_plot_theme(10,"Segoe UI Semibold")
+
+
+ggplotly(plot_total_customer, tooltip="text") %>%
+layout(showlegend=FALSE) %>% 
+layout(title = list(text = paste0('Total Customer by State',
+                                    '<br>',
+                                    '<sup>',
+                                    'Total Customer by State from 2016-09-04 untill 2018-10-17',
+                                    '</sup>')))
+
+
+```
+
+Total customer paling banyak di Sao Paulo dengan proporsi 41.8% dari jumlah keseluruhan customer dan juga jauh lebih tinggi dari negara bagian lainnya. Hal ini masuk akal, mengingat jumlah customer sangat mempengaruhi total order amount.  Dalam case ini, dapat dipastikan Sao Paulo adalah negara bagian yang paling memiliki potensi untuk meningkatkan conversion rate dan customer retention. 
+
+<br>
+--visualisasi map terlalu berat.
+```{r, fig.width=8.5, eval=FALSE}
+#EVAL FALSE
+#Brazil<-map_data("world")%>%filter(region=="Brazil")
+geo_customer_order <- customer_order %>% 
+  filter(!order_status %in% c("canceled","unavailable")) %>% 
+  select(customer_unique_id,customer_state_name,customer_lat,customer_lng,customer_state_name) %>% 
+  distinct() %>% 
+  mutate(
+    popup = glue("Cust ID: {customer_unique_id}
+                 State: {customer_state_name}")
+  )
+
+# plot_geo_customer_order <- ggplot() +
+#   geom_polygon(data = Brazil, aes(x=long, y = lat, group = group), fill="#181818")+
+#   geom_point(data= geo_customer_order,aes(x=customer_lng,y=customer_lat, color=customer_state_name, text=popup),
+#              size=0.3, alpha=0.5)+
+#   labs(
+#     title = "Customer by State",
+#     x="Longitude",
+#     y="Latitude",
+#     color="State Name"
+#   )+
+#   my_theme_fill()+
+#   my_plot_theme(10)
+# 
+# 
+# ggplotly(plot_geo_customer_order, tooltip="text", height=560) %>%
+# #layout(showlegend=FALSE) %>% 
+# layout(title = list(text = paste0('Customer by State',
+#                                     '<br>',
+#                                     '<sup>',
+#                                     'Customer by State based on order from 2016-09-04 untill 2018-10-17',
+#                                     '</sup>')))
+
+
+ labels <- sprintf(
+      "ID: <strong>%s</strong><br/>State Name: <strong>%s</strong>",
+      geo_customer_order$customer_unique_id, 
+      geo_customer_order$customer_state_name
+    ) %>% lapply(htmltools::HTML)
+
+geo_customer_order %>% leaflet() %>%
+  setView(-55.69142,-17.95,4) %>%
+  addTiles() %>%
+  #addProviderTiles(providers$CartoDB.DarkMatter) %>%
+  #addProviderTiles(provider = providers$Esri.WorldTopoMap) %>%
+  #addProviderTiles(provider = providers$HERE.mapLabels) %>%
+  #addProviderTiles(providers$Stamen.TonerLines) %>%
+  clearShapes() %>%
+   addMarkers(
+        clusterOptions = markerClusterOptions(),
+        lng =  ~ customer_lng,
+        lat =  ~ customer_lat,
+        label = labels,
+        labelOptions = labelOptions(
+          style = list("font-weight" = "normal", padding = "3px 8px"),
+          textsize = "15px",
+          direction = "auto")
+      )
+  # addCircles( lng =  ~ customer_lng,
+  #        lat =  ~ customer_lat,
+  #        label = labels,
+  #        popup = labels,
+  #        labelOptions = labelOptions(
+  #           style = list("font-weight" = "normal", padding = "3px 8px"),
+  #           textsize = "15px",
+  #           direction = "auto"),
+  #        #weight = 3,
+  #        #radius=40,
+  #        color= ~cof(recency_score), stroke = TRUE, fillOpacity = 0.5) %>%
+  # addLegend("bottomright", pal = cof, values = ~recency_score,
+  #   title = "Recency Score",
+  #   opacity = 1
+  # )
+
+  
+```
+
+
+
+## Top 10 Product Category by Order
+```{r, fig.width=8.5}
+plot_best_category <- customer_order %>% 
+  filter(!order_status %in% c("canceled","unavailable")) %>% 
+  group_by(product_category_name,year=year(order_purchase_timestamp)) %>% 
+  summarise(
+    freq = n()
+  ) %>% 
+  arrange(year,desc(freq)) %>% 
+  group_by(year) %>% 
+  slice(1:10) %>% 
+  ungroup() %>% 
+  mutate(
+    product_category_name = gsub("_"," ",product_category_name),
+    popup = glue("Year : {2016}
+                 Product Category : {product_category_name}
+                 Ordered : {freq}"
+    ),
+    #product_category_name = str_sub(product_category_name,1,10),
+    product_category_name = reorder(product_category_name, freq)
+    
+  ) %>% 
+  #filter(year==2017) %>% 
+  ggplot(aes(x=product_category_name,y=as.integer(freq), group=year, fill=product_category_name)) +
+  geom_bar(stat = "identity", show.legend = FALSE, aes(text=popup))+
+  labs(
+    title = "Top 10 Product Category per Year",
+    y="Order Quantity",
+    x=""
+  )+
+  coord_flip()+
+  facet_grid(~year, scales = "free")+
+  my_theme_fill()+
+  my_plot_theme(11)
+
+
+ggplotly(plot_best_category, tooltip="text") %>%
+layout(showlegend=FALSE,
+       margin = list(l = 50, r = 30, b = 50, t = 90)) %>% 
+layout(title = list(text = paste0('Top 10 Product Category per Year',
+                                    '<br>',
+                                    '<sup>',
+                                    'Best Product based on Order Quantity from 2016-09-04 untill 2018-10-17',
+                                    '</sup>')))
+
+```
+
+
+Chart diatas memberikan informasi 10 kategori produk yang paling banyak diorder dari tahun 2016-2018. Jika dilihat kategori produk yang konsisten masuk kategori top 10 product category dari 2016-2018 adalah **Health Beauty, Sports Leisure, Funiture Decor, Computers Accessories dan Housewares**. Jika dilihat secara keseluruhan, kategori produk **Health Beauty** menjadi tren produk nomor 1 yang diorder, namun jika secara quantity produk kategori **bed bath table** yang paling banyak di-order meskipun produk kategori **bed bath table** tidak masuk top 10 product category di tahun 2016. Berdasarkan case ini jika kita hendak merekomendasikan berdasarkan tren maka kategori produk **Health Beauty** jelas punya pasar setiap tahunnya, namun jika kita hendak merekomendasikan berdasarkan jumlah order maka produk kategori **bed bath table** karena jumlah ordernya paling tinggi dan berkelanjutan dari 2017-2018.
+
+
+## Top 10 Product by Order
+```{r, fig.width=8.5}
+plot_best_product <- customer_order %>% 
+  filter(!order_status %in% c("canceled","unavailable")) %>% 
+  group_by(product_id,product_code,product_category_name,year=year(order_purchase_timestamp)) %>% 
+  summarise(
+    freq = n()
+  ) %>% 
+  arrange(year,desc(freq)) %>% 
+  group_by(year) %>% 
+  slice(1:10) %>% 
+  ungroup() %>% 
+  mutate(
+    product_code = reorder(product_code, freq),
+    popup = glue("Year : {year}
+                  Product Code: {product_code}
+                 Product Category : {product_category_name}
+                 Ordered : {freq}"
+    )
+  ) %>% 
+  ggplot(aes(x=product_code,y=as.integer(freq), group=year, fill=product_code)) +
+  geom_bar(stat = "identity", show.legend = FALSE, aes(text=popup))+
+  labs(
+    title = "Top 10 Product per Year",
+    y="Order Quantity",
+    x=""
+  )+
+  coord_flip()+
+  facet_grid(~year, scales = "free")+
+  my_theme_fill()+
+  my_plot_theme(11)+
+  theme(
+    panel.spacing = unit(1.2,"lines")
+  )
+
+
+ggplotly(plot_best_product, tooltip="text", height = 600) %>%
+layout(showlegend=FALSE,
+       margin = list(l = 50, r = 30, b = 50, t = 90)) %>% 
+layout(title = list(text = paste0('Top 10 Product by Order per Year',
+                                    '<br>',
+                                    '<sup>',
+                                    'Best Product based on Order Quantity from 2016-09-04 untill 2018-10-17',
+                                    '</sup>')))
+
+```
+
+Chart diatas memberikan informasi 10 produk yang paling banyak di-order dan menunjukan tren produk di-order dari 2016-2018. Jika dilihat 10 produk yang paling banyak dibeli ditahun 2016 tidak masuk ke top 10 product lagi ditahun 2017 dan 2018. Jika dilihat produk PR14052, PR30294, PR04599 masuk kategori top 10 product pada tahun 2017 dan 2018 sehingga kemungkinan produk tersebut masuk tren ditahun selanjutnya lebih besar. Namun jika dilihat secara keseluruhan, tren Top 10 Product produk terjual setiap tahunnya relatif berbeda sehingga akan sulit memastikan rekomendasi produk yang spesifik ke setiap customer setiap tahunnya.
+
+
+## Top 10 Product by Rating
+
+```{r, fig.width=8.5}
+
+plot_best_rating <- customer_order %>% 
+  filter(!order_status %in% c("canceled","unavailable")) %>% 
+  group_by(product_id,product_code,product_category_name,year=year(order_purchase_timestamp)) %>% 
+  summarise(
+    total_rating = sum(product_rating)
+  ) %>% 
+  arrange(year,desc(total_rating)) %>% 
+  group_by(year) %>% 
+  slice(1:10) %>% 
+  ungroup() %>% 
+  mutate(
+    product_code = reorder(product_code, total_rating),
+    popup = glue("Year : {year}
+                  Product Code: {product_code}
+                 Product Category : {product_category_name}
+                 Total Rating : {total_rating}"
+    )
+  ) %>% 
+  ggplot(aes(x=product_code,y=as.integer(total_rating), group=year, fill=product_code)) +
+  geom_bar(stat = "identity", show.legend = FALSE, aes(text=popup))+
+  labs(
+    title = "Top 10 Product per Year",
+    y="Total Product Rating",
+    x=""
+  )+
+  coord_flip()+
+  facet_grid(~year, scales = "free")+
+  my_theme_fill()+
+  my_plot_theme(11)+
+  theme(
+    panel.spacing = unit(1.2,"lines")
+  )
+
+
+ggplotly(plot_best_rating, tooltip="text", height = 600) %>%
+layout(showlegend=FALSE,
+       margin = list(l = 50, r = 30, b = 50, t = 90)) %>% 
+layout(title = list(text = paste0('Top 10 Product by Rating per Year',
+                                    '<br>',
+                                    '<sup>',
+                                    'Best Product based on Rating from 2016-09-04 untill 2018-10-17',
+                                    '</sup>')))
+```
+
+Data Rating diatas diambil berdasarkan **total rating** yang didapatkan dari setiap produk. Masing-masing produk diberikan rating 1 - sampai 5 setiap kali ketika customer selesai melakukan order. Alasanya menggunakan jumlah rating karena tidak semua produk memiliki total order quantity yang sama. Chart diatas juga menunjukan tren produk yang berbeda setiap tahunnya. Rating sendiri bisa kita gunakan untuk menentukan rekomendasi produk kepada customer dengan mencari tingkat similarity dari masing-masing produk, namun tantangannya 97% customer hanya melakukan 1 kali order yang dimana setiap order hanya terdiri dari 1 produk. Berdasarkan case ini mungkin kita bisa mempertimbangkan variabel lain yang digunakan untuk menentukan rekomendasi produk secara personal.
+
+
+<br>
+
+***
+
+# EDA Conclusion
+
+Olist sangat baik dalam mendatangkan customer baru. Hal ini dibuktikan 97% transaksi dihasilkan oleh customer baru. Namun mengingat hanya 3% Customer yang melakukan repeat order dari September 2016-Oktober 2018, saya berasumsi bahwa Olist kurang memperhatikan customer lama atau customer yang sudah melakukan order sebelumnya. Melihat data order pada September-Oktober 2018, jumlah customer baru hanya 18 orang sehingga mengakibatkan penurunan frekuensi order yang drastis dari bulan sebelumnya. Hal ini menunjukan frekuensi order pada Olist sangat bergantung pada pertumbuhan customer baru, sehingga saya menyarankan supaya Olist juga dapat mempertimbangkan untuk meningkatkan frekuensi order pada customer yang sudah ada. Jika berdasarkan visualisasi diatas, langkah awal yang dapat diambil yaitu **memberikan promosi dan rekomendasi produk-produk terlaris dan sedang tren kepada customer yang berada di negara bagian Sao Paulo, Rio de Janeiro, Minas Gerais, Rio Grande do Sul dan Parana karena 77% customer terdapat pada negara bagian tersebut.** Supaya strategi promosi dan rekomendasi tersebut lebih optimal, saya juga menyarankan Olist untuk melakukan segmentasi terhadap customer yang sudah ada supaya target pasarnya bisa lebih tepat dan tentunya akan lebih menghemat waktu dan biaya pemasaran.
+
+***
+
+<br>
+
+
+# Project Background Summary
+
+Berdasarkan hasil analisa diatas, maka projek ini bertujuan untuk membangun **model segmentasi customer dan model rekomendasi produk terhadap customer yang berada di negara bagian Sao Paulo, Rio de Janeiro, Minas Gerais, Rio Grande do Sul dan Parana**. Model segmentasi customer akan diterapkan berdasarkan RFM Value karena sebagian besar customer hanya melakukan 1 kali order dan model rekomendasi akan diterapkan berdasarkan produk yang di-suka/order oleh customer. Oleh karena itu, data input yang digunakan untuk membuat model tersebut harus memiliki struktur sebagai berikut:
+
+```{r}
+customer_order %>% 
+  select(-c(customer_city,customer_region)) %>% 
+  head(10)
+```
+
+
+
+
+
+Data input akan dikelola dan memiliki RFM Value. Metode analisis Recency, Frequency, Monetary Value (RFM) adalah salah satu metode analisis perilaku pelanggan berdasarkan histori transaksinya. Output dari analisis RFM dapat digunakan untuk melakukan segmentasi pelanggan. Metode analisis RFM dapat menjelaskan:<br>
+
+1. Seberapa baru pelanggan melakukan transaksi?<br>
+2. Seberapa sering pelanggan melaukan transaksi?<br>
+3. Seberapa besar transaksi yang sudah dilakukan pelanggan?<br>
+
+Sesuai artikel yang dipublish oleh [www.marketeers](https://marketeers.com/go-jek-andalkan-rfm-dalam-tentukan-segmentasi-pelanggan/), GO-JEK adalah salah satu perusahaan yang menggunakan metode analisis RFM dalam menentukan segmentasi pelanggan. GO-JEK membagi segmentasi pelanggan ke dalam empat kelas, yaitu Gold, Silver, Bronze, dan Non-Profit. Segmentasi Gold memiliki kualifikasi konsumen dengan high monetary, high frequency, dan high recency. Silver memiliki kualifikasi konsumen dengan tingkat monetary yang tinggi, frequency yang rendah, dan recency yang tinggi. Kategori Bronze terdiri dari konsumen dengan tingkat monetary rendah, frequency, dan recency yang tinggi. Sementara segmentasi Non-Profit memiliki kualifikasi konsumen dengan kualifikasi monetary, frequency, dan recency yang rendah.<br>
+
+Dalam case **Olist** ini, dataset berisikan data transaksi dari 2016-09-04 sampai 2018-10-17 sehinnga berikut perlakukan RFM Value untuk case ini:<br>
+
+1. *Recency* : Selisih antara hari terakhir pelanggan melakukan transaksi dan hari melakukan analisis. Dalam nilai ini terdapat sedikit penyesuaian, berhubung data transaksi terakhir 2018-10-17, maka hari melakukan analisis saya set default 2018-10-18.<br>
+2. *Frequency* : Jumlah transaksi yang dilakukan oleh pelanggan dari 2016-09-04 sampai 2018-10-17.<br>
+3. *Monetary* : Jumlah total order amount yang sudah dikeluarkan pelanggan dari 2016-09-04 sampai 2018-10-17. <br>
+
+
+```{r, eval=TRUE}
+analysis_date = date(max(customer_order$order_purchase_timestamp))+days(1)
+
+customer_rfm <- customer_order %>% 
+  group_by(customer_unique_id) %>% 
+  mutate(first_order = min(order_purchase_timestamp),
+         last_order = max(order_purchase_timestamp),
+         min_product_price = min(price),
+         max_product_price = max(price),
+         total_price = sum(price),
+         total_freight = sum(freight_value),
+         recency = (analysis_date-date(last_order))
+        ) %>%
+  slice(1) %>%
+  ungroup() %>% 
+  select(customer_unique_id,customer_lat,customer_lng,customer_state_name,
+         first_order,last_order,last_order,min_product_price,
+         max_product_price,total_price,total_freight,recency) %>% 
+  mutate(
+    min_product_price = ifelse(is.na(min_product_price),0,min_product_price),
+    max_product_price = ifelse(is.na(max_product_price),0,max_product_price),
+    total_price = ifelse(is.na(total_price),0,total_price),
+    total_freight = ifelse(is.na(total_freight),0,total_freight)
+  )
+
+customer_rfm_freq <- customer_order %>% 
+  select(customer_unique_id, order_id) %>% 
+  distinct() %>% 
+  group_by(customer_unique_id) %>% 
+  summarise(
+    frequency = n()
+  ) %>% 
+  ungroup()
+
+
+customer_rfm <- customer_rfm %>% left_join(
+customer_rfm_freq,
+   by=c("customer_unique_id")) %>% 
+  mutate(
+    recency = round(as.numeric(recency)),
+    monetary = total_price + total_freight
+  )
+  
+
+#summary(customer_rfm)
+customer_rfm_result <- rfm_table_customer(customer_rfm, customer_unique_id, frequency, recency, monetary, analysis_date)
+
+customer_rfm <- merge(customer_rfm, customer_rfm_result$rfm, by.x=c("customer_unique_id"), by.y=c("customer_id")) %>%
+  filter(customer_state_name %in% c("São Paulo","Rio de Janeiro","Minas Gerais","Rio Grande do Sul","Paraná")) %>% 
+  distinct() %>% 
+  select(-c(recency_days,transaction_count,amount))
+
+#summary(customer_rfm)
+
+wd <-  as.character(getwd())
+saveRDS(object=customer_rfm, file=paste(paste(wd,"/data_clean/",sep = ""),"customer_rfm.rds",sep=""))
+```
+
+
+**Berikut 10 data teratas dari Customer RFM Model yang dibuat:**
+Data-data selain RFM Value digunakan sebagai variabel pendukung untuk melakukan segmentasi dan rekomendasi.
+
+```{r}
+customer_rfm <- readRDS("data_clean/customer_rfm.rds")
+head(customer_rfm,10)
+```
+
+Berikut visualisasi map-nya:
+
+```{r, fig.width=8.5}
+cof <- colorFactor(pal_one, 
+                    domain= unique(unique(customer_rfm$customer_state_name)))
+  
+ labels <- sprintf(
+      "ID: %s <br/>State Name: %s <br>Recency: %g <br>Frequency: %g <br/>Monetary: R$ %g <br> RFM Score: %g",
+      customer_rfm$customer_unique_id, 
+      customer_rfm$customer_state_name, 
+      customer_rfm$recency,
+      customer_rfm$frequency,
+      customer_rfm$monetary,
+      customer_rfm$rfm_score
+    ) %>% lapply(htmltools::HTML)
+
+customer_rfm %>% leaflet() %>%
+  setView(-54.69142,-23.95,5) %>%
+  addTiles() %>%
+  addProviderTiles(providers$CartoDB.DarkMatter) %>%
+  #addProviderTiles(provider = providers$Esri.WorldTopoMap) %>%
+  #addProviderTiles(provider = providers$HERE.mapLabels) %>%
+  #addProviderTiles(providers$Stamen.TonerLines) %>%
+  clearShapes() %>%
+  addCircles( lng =  ~ customer_lng,
+         lat =  ~ customer_lat,
+         label = labels,
+         popup = labels,
+         labelOptions = labelOptions(
+            style = list("font-weight" = "normal", padding = "3px 8px"),
+            textsize = "15px",
+            direction = "auto"),
+         #weight = 3,
+         #radius=40,
+         color= ~cof(customer_state_name), stroke = TRUE, fillOpacity = 0.5) %>%
+  addLegend("bottomright", pal = cof, values = ~customer_state_name,
+    title = "State Name",
+    #labFormat = labelFormat(prefix = "$"),
+    opacity = 1
+  )
+```
+
+<br>
+
+## Total Customer by Recency Score
+```{r, fig.width=8.5}
+plot_rfm_recency <- customer_rfm %>% 
+  group_by(recency_score) %>% 
+  summarise(
+    mean_recency = median(recency),
+    min_recency = min(recency),
+    max_recency = max(recency),
+    min_recency_date = as.Date(min(last_order)),
+    max_recency_date = as.Date(max(last_order)),
+    freq = n()
+  ) %>% 
+  ungroup() %>% 
+  mutate(
+    recency_score = as.factor(recency_score),
+    date_analysis = analysis_date,
+    popup = glue("Total Customer : {freq}
+                 Interval Recency : {min_recency} - {max_recency}
+                 Mean. recency : {mean_recency}
+                 Interval Date : {min_recency_date} - {max_recency_date}
+                 Date of analysis : {date_analysis}")
+  ) %>% 
+  ggplot(aes(factor(recency_score),freq, fill=factor(recency_score))) + 
+  geom_bar(stat="identity", aes(text=popup), show.legend = FALSE)+
+  geom_text(aes(label=freq, y=freq+1000), color="white", size=3)+
+  labs(
+    title = "Customer by Recency Score",
+    x = "Recency Score",
+    y = "Total Customer"
+  ) +
+  my_theme_fill()+
+  #scale_fill_gradient(low=my_theme_hex("col1"),high=my_theme_hex("col6"))+
+  my_plot_theme(10)
+
+
+
+ggplotly(plot_rfm_recency, tooltip="text") %>%
+layout(showlegend=FALSE) %>% 
+layout(title = list(text = paste0('Total Customer by Recency Score',
+                                    '<br>',
+                                    '<sup>',
+                                    paste0("Data based on order from ", 
+                                           as.Date(min(customer_rfm$last_order))," till ",
+                                           as.Date(max(customer_rfm$last_order))),
+                                    '</sup>')))
+  
+
+```
+
+Semakin tinggi nilai Recency maka semakin jauh jarak seorang customer melakukan order terakhirnya. Jika dilihat proporsi jumlah customer berdasar recency score-nya cukup seimbang. 
+
+
+```{r, fig.width=8.5, eval=FALSE}
+#Berikut ini visualisasi map berdasarkan **Recency Score**:
+#eval=FALSE
+cof <- colorFactor(pal_one, 
+                    domain= unique(customer_rfm$recency_score))
+  
+ labels <- sprintf(
+      "ID: <strong>%s</strong><br/>State Name: <strong>%s</strong> <br>Recency: <strong>%g</strong> <br>Frequency: <strong>%g</strong> <br/>Monetary: <strong>R$ %g</strong> <br> RFM Score: <strong>%g</strong>",
+      customer_rfm$customer_unique_id, 
+      customer_rfm$customer_state_name, 
+      customer_rfm$recency,
+      customer_rfm$frequency,
+      customer_rfm$monetary,
+      customer_rfm$rfm_score
+    ) %>% lapply(htmltools::HTML)
+
+customer_rfm %>% leaflet() %>%
+  setView(-55.69142,-23.95,5) %>%
+  addTiles() %>%
+  addProviderTiles(providers$CartoDB.DarkMatter) %>%
+  #addProviderTiles(provider = providers$Esri.WorldTopoMap) %>%
+  #addProviderTiles(provider = providers$HERE.mapLabels) %>%
+  #addProviderTiles(providers$Stamen.TonerLines) %>%
+  clearShapes() %>%
+  addCircles( lng =  ~ customer_lng,
+         lat =  ~ customer_lat,
+         label = labels,
+         popup = labels,
+         labelOptions = labelOptions(
+            style = list("font-weight" = "normal", padding = "3px 8px"),
+            textsize = "15px",
+            direction = "auto"),
+         #weight = 3,
+         #radius=40,
+         color= ~cof(recency_score), stroke = TRUE, fillOpacity = 0.5) %>%
+  addLegend("bottomright", pal = cof, values = ~recency_score,
+    title = "Recency Score",
+    opacity = 1
+  )
+```
+
+<br>
+
+## Total Customer by Frequency Score
+
+```{r, fig.width=8.5}
+plot_rfm_frequency <- customer_rfm %>% 
+  group_by(frequency_score) %>% 
+  summarise(
+    mean_frequency = median(frequency),
+    min_frequency = min(frequency),
+    max_frequency = max(frequency),
+    freq = n()
+  ) %>% 
+  ungroup() %>% 
+  mutate(
+    frequency_score = as.factor(frequency_score),
+    date_analysis = analysis_date,
+    popup = glue("Total Customer : {freq}
+                 Interval Frequency : {min_frequency} - {max_frequency}
+                 Mean. Frequency : {mean_frequency}
+                 Date of analysis : {date_analysis}")
+  ) %>% 
+  ggplot(aes(frequency_score,freq, fill=frequency_score)) + 
+  geom_bar(stat="identity", aes(text=popup), show.legend = FALSE)+
+  geom_text(aes(label=freq, y=freq+3000), color="white", size=3)+
+  labs(
+    title = "Customer by Recency Score",
+    x = "Frequency Score",
+    y = "Total Customer"
+  ) +
+  my_theme_fill()+
+  #scale_fill_gradient(low=my_theme_hex("col1"),high=my_theme_hex("col6"))+
+  my_plot_theme(10)
+
+
+ggplotly(plot_rfm_frequency, tooltip="text") %>%
+layout(showlegend=FALSE) %>% 
+layout(title = list(text = paste0('Total Customer by Frequency Score',
+                                    '<br>',
+                                    '<sup>',
+                                    paste0("Data based on order from ", 
+                                           as.Date(min(customer_rfm$last_order))," till ",
+                                           as.Date(max(customer_rfm$last_order))),
+                                    '</sup>')))
+```
+
+Semakin tinggi Frequency Score maka semakin banyak melakukan order (Repeat Order). Berdasarkan chart diatas, data kita hanya memiliki Frequency Score 1 dan 5 dengan proporsi yang tidak seimbang. Hal ini sesuai dengan analisa sebelumnya, Frequency Score 1 merupakan data customer yang hanya melakukan 1 kali order dan Frequency Score > 5 merupakan data customer yang melakukan order lebih dari 1 kali. 
+
+```{r, fig.width=8.5, eval=FALSE}
+#Berikut ini visualisasi map berdasarkan **Frequency Score**:
+#Eval=FALSE
+cof <- colorFactor(pal_one, 
+                    domain= unique(customer_rfm$frequency_score))
+  
+ labels <- sprintf(
+      "ID: <strong>%s</strong><br/>State Name: <strong>%s</strong> <br>Recency: <strong>%g</strong> <br>Frequency: <strong>%g</strong> <br/>Monetary: <strong>R$ %g</strong> <br> RFM Score: <strong>%g</strong>",
+      customer_rfm$customer_unique_id, 
+      customer_rfm$customer_state_name, 
+      customer_rfm$recency,
+      customer_rfm$frequency,
+      customer_rfm$monetary,
+      customer_rfm$rfm_score
+    ) %>% lapply(htmltools::HTML)
+
+ 
+ 
+customer_rfm %>% leaflet() %>%
+  setView(-55.69142,-23.95,5) %>%
+  addTiles() %>%
+  addProviderTiles(providers$CartoDB.DarkMatter) %>%
+  #addProviderTiles(provider = providers$Esri.WorldTopoMap) %>%
+  #addProviderTiles(provider = providers$HERE.mapLabels) %>%
+  #addProviderTiles(providers$Stamen.TonerLines) %>%
+  clearShapes() %>%
+  addCircles( lng =  ~ customer_lng,
+         lat =  ~ customer_lat,
+         label = labels,
+         popup = labels,
+         labelOptions = labelOptions(
+            style = list("font-weight" = "normal", padding = "3px 8px"),
+            textsize = "15px",
+            direction = "auto"),
+         #weight = 3,
+         #radius=40,
+         color= ~cof(frequency_score), stroke = TRUE, fillOpacity = 0.5) %>%
+  addLegend("bottomright", pal = cof, values = ~frequency_score,
+    title = "Frequency Score",
+    opacity = 1
+  )
+```
+
+
+
+## Total Customer by Monetary Score
+
+```{r, fig.width=8.5}
+plot_rfm_monetary <- customer_rfm %>% 
+  group_by(monetary_score) %>% 
+  summarise(
+    mean_monetary = median(monetary),
+    min_monetary = min(monetary),
+    max_monetary = max(monetary),
+    freq = n()
+  ) %>% 
+  ungroup() %>% 
+  mutate(
+    monetary_score = as.factor(monetary_score),
+    date_analysis = analysis_date,
+    popup = glue("Total Customer : {freq}
+                 Interval Monetary : R${min_monetary} - R${max_monetary}
+                 Mean. Monetary : R${mean_monetary}
+                 Date of analysis : {date_analysis}")
+  ) %>% 
+  ggplot(aes(monetary_score,freq, fill=monetary_score)) + 
+  geom_bar(stat="identity", aes(text=popup), show.legend = FALSE)+
+  geom_text(aes(label=freq, y=freq+1000), color="white", size=3)+
+  labs(
+    title = "Customer by Monetary Score",
+    x = "Monetary Score",
+    y = "Total Customer"
+  ) +
+  my_theme_fill()+
+  #scale_fill_gradient(low=my_theme_hex("col1"),high=my_theme_hex("col6"))+
+  my_plot_theme(10)
+
+
+ggplotly(plot_rfm_monetary, tooltip="text") %>%
+layout(showlegend=FALSE) %>% 
+layout(title = list(text = paste0('Total Customer by Monetary Score',
+                                    '<br>',
+                                    '<sup>',
+                                    paste0("Data based on order from ", 
+                                           as.Date(min(customer_rfm$last_order))," till ",
+                                           as.Date(max(customer_rfm$last_order))),
+                                    '</sup>')))
+
+
+```
+
+Semakin tinggi Monetary Score, maka semakin banyak total order amount yang dikeluarkan seorang customer. Berdasarkan chart diatas, data kita memiliki Monetary Score 1 sampai 5 dengan proporsi yang relatif seimbang.
+
+
+```{r, fig.width=8.5, eval=FALSE}
+#Eval False
+cof <- colorFactor(pal_one, 
+                    domain= unique(customer_rfm$monetary_score))
+  
+ labels <- sprintf(
+      "ID: <strong>%s</strong><br/>State Name: <strong>%s</strong> <br>Recency: <strong>%g</strong> <br>Frequency: <strong>%g</strong> <br/>Monetary: <strong>R$ %g</strong> <br> RFM Score: <strong>%g</strong>",
+      customer_rfm$customer_unique_id, 
+      customer_rfm$customer_state_name, 
+      customer_rfm$recency,
+      customer_rfm$frequency,
+      customer_rfm$monetary,
+      customer_rfm$rfm_score
+    ) %>% lapply(htmltools::HTML)
+
+customer_rfm %>% leaflet() %>%
+  setView(-55.69142,-23.95,5) %>%
+  addTiles() %>%
+  addProviderTiles(providers$CartoDB.DarkMatter) %>%
+  #addProviderTiles(provider = providers$Esri.WorldTopoMap) %>%
+  addProviderTiles(provider = providers$HERE.mapLabels) %>%
+  addProviderTiles(providers$Stamen.TonerLines) %>%
+  clearShapes() %>%
+  addCircles( lng =  ~ customer_lng,
+         lat =  ~ customer_lat,
+         label = labels,
+         popup = labels,
+         labelOptions = labelOptions(
+            style = list("font-weight" = "normal", padding = "3px 8px"),
+            textsize = "15px",
+            direction = "auto"),
+         #weight = 3,
+         #radius=40,
+         color= ~cof(monetary_score), stroke = TRUE, fillOpacity = 0.5) %>%
+  addLegend("bottomright", pal = cof, values = ~monetary_score,
+    title = "Monetary Score",
+    #labFormat = labelFormat(prefix = "$"),
+    opacity = 1
+  )
+
+
+
+
+
+```
+
+
+
+
+
+
